@@ -1,0 +1,4 @@
+picogo
+*.o
+*.a
+go.sum

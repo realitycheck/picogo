@@ -1,0 +1,4 @@
+[submodule "picopi"]
+	path = picopi
+	url = https://github.com/realitycheck/picopi
+	branch = master
