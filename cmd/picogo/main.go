@@ -47,7 +47,7 @@ func main() {
 
 	log.SetOutput(os.Stderr)
 
-	tts, err := picogo.New(picogo.Lang(lang), picogo.LangDir(dir))
+	tts, err := picogo.New(lang, dir)
 	checkErr(err)
 
 	var text string

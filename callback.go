@@ -5,41 +5,45 @@ package picogo
 */
 import "C"
 import (
-	"fmt"
 	"sync"
 	"unsafe"
 )
 
-//export speakCallback
-func speakCallback(ptr unsafe.Pointer, rate uint32, format uint32, channels int, audio unsafe.Pointer, audioBytes uint32, final bool) bool {
-	return getctx(ptr).speak(C.GoBytes(audio, C.int(audioBytes)), final)
+//export picogoCallback
+func picogoCallback(ptr unsafe.Pointer, audio unsafe.Pointer, audioBytes C.int, final bool) bool {
+	return getctx(ptr).callback(C.GoBytes(audio, audioBytes), final)
 }
 
 var userLock sync.Mutex
-var userData = make(map[unsafe.Pointer]*ctx)
+var userData = make(map[uintptr]*ctx)
+var userPtr uintptr // XXX
+
+//SpeakCallback receives PCM audio chunks as they are being produced.
+type SpeakCallback func(pcm []byte, final bool) bool
 
 type ctx struct {
-	e     *engine
-	speak SpeakCallback
+	e        *engine
+	callback SpeakCallback
+	ptr      uintptr
 }
 
-func (c *ctx) ptr() unsafe.Pointer {
+func (c *ctx) release() {
 	userLock.Lock()
 	defer userLock.Unlock()
-	ptr := unsafe.Pointer(C.CString(fmt.Sprintf("%p", c)))
-	userData[ptr] = c
-	return ptr
+	delete(userData, c.ptr)
 }
 
-func freectx(ptr unsafe.Pointer) {
+func newctx(e *engine, cb SpeakCallback) *ctx {
 	userLock.Lock()
 	defer userLock.Unlock()
-	defer C.free(ptr)
-	delete(userData, ptr)
+	userPtr++
+	c := &ctx{e, cb, userPtr}
+	userData[c.ptr] = c
+	return c
 }
 
 func getctx(ptr unsafe.Pointer) *ctx {
 	userLock.Lock()
 	defer userLock.Unlock()
-	return userData[ptr]
+	return userData[uintptr(ptr)]
 }

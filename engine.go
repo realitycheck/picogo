@@ -1,16 +1,18 @@
-// +build linux,cgo
-
 package picogo
 
 /*
 #cgo CFLAGS: -I./picopi/pico/lib -I./picopi/pico/tts
-#cgo LDFLAGS:  -lsvoxpico -lm
+#cgo linux LDFLAGS: -lm
 
 #include <stdlib.h>
+
 #include <tts_engine.c>
 #include <langfiles.c>
 
-extern bool speakCallback(void *user, uint32_t rate, uint32_t format, int channels, uint8_t *audio, uint32_t audio_bytes, bool final);
+bool cgo_wrapper(void *user, uint32_t rate, uint32_t format, int channels, uint8_t *audio, uint32_t audio_bytes, bool final) {
+	bool picogoCallback(void*, uint8_t*, uint32_t, bool);
+	return picogoCallback(user, audio, audio_bytes, final);
+}
 */
 import "C"
 import (
@@ -89,9 +91,6 @@ var (
 	}
 )
 
-//SpeakCallback receives PCM audio chunks as they are being produced.
-type SpeakCallback func(pcm []byte, final bool) bool
-
 //Engine interface provides pico's TTS engine bindings.
 type Engine interface {
 	//Rate gets speech rate.
@@ -112,66 +111,34 @@ type Engine interface {
 	//SetPitch sets speech pitch.
 	SetPitch(int)
 
-	//Stop sends abort signal to Speak() and SpeakWithCallback() running function processes.
+	//Stop sends an abort signal to the underlying Speak/SpeakCB audio synth routine.
 	Stop()
 
 	//Speak produces PCM audio output of text value.
 	Speak(string) ([]byte, error)
 
-	//SpeakWithCallback produces PCM audio output of text value to specified callback function.
-	SpeakWithCallback(string, SpeakCallback) error
-}
-
-//EngineOption represents TTS engine configuration parameter.
-type EngineOption func(*engine) error
-
-//Lang option sets engine's language.
-func Lang(lang string) EngineOption {
-	return func(e *engine) error {
-		if _, ok := supportedLangs[lang]; !ok {
-			return fmt.Errorf("%s: %w", lang, ErrBadLanguage)
-		}
-		e.lang = lang
-		return nil
-	}
-}
-
-//LangDir option sets engine's languages directory.
-func LangDir(dir string) EngineOption {
-	return func(e *engine) error {
-		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-			return fmt.Errorf("%s: %w", dir, ErrBadDirectory)
-		}
-		e.dirs = append(e.dirs, dir)
-		return nil
-	}
+	//SpeakCB produces PCM audio output of text value to specified callback function.
+	SpeakCB(string, SpeakCallback) error
 }
 
 //New returns pico's TTS engine instance.
-func New(opts ...EngineOption) (Engine, error) {
-	e := &engine{
-		dirs: []string{
-			LangDirDefault,
-		},
-		lang: LangDefault,
+func New(lang, dir string) (Engine, error) {
+	if _, ok := supportedLangs[lang]; !ok {
+		return nil, fmt.Errorf("%s: %w", lang, ErrBadLanguage)
 	}
-	for _, opt := range opts {
-		if err := opt(e); err != nil {
-			return nil, err
-		}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("%s: %w", dir, ErrBadDirectory)
 	}
-	for _, dir := range e.dirs {
-		cdir := C.CString(dir)
-		clang := C.CString(e.lang)
-		defer C.free(unsafe.Pointer(cdir))
-		defer C.free(unsafe.Pointer(clang))
 
-		tts := C.TtsEngine_Create(cdir, clang, C.tts_callback_t(C.speakCallback))
-		if tts != nil {
-			e.tts = tts
-			break
-		}
+	cdir := C.CString(dir)
+	clang := C.CString(lang)
+	defer C.free(unsafe.Pointer(cdir))
+	defer C.free(unsafe.Pointer(clang))
+
+	e := &engine{
+		tts: C.TtsEngine_Create(cdir, clang, C.tts_callback_t(C.cgo_wrapper)),
 	}
+
 	if e.tts == nil {
 		return nil, ErrCreate
 	}
@@ -184,15 +151,13 @@ func New(opts ...EngineOption) (Engine, error) {
 }
 
 type engine struct {
-	tts  *C.TTS_Engine
-	lang string
-	dirs []string
+	tts *C.TTS_Engine
 }
 
 func (e *engine) Speak(text string) ([]byte, error) {
 	var b bytes.Buffer
 
-	err := e.SpeakWithCallback(text, func(pcm []byte, final bool) bool {
+	err := e.SpeakCB(text, func(pcm []byte, final bool) bool {
 		_, err := b.Write(pcm)
 		return err == nil
 	})
@@ -200,15 +165,14 @@ func (e *engine) Speak(text string) ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func (e *engine) SpeakWithCallback(text string, cb SpeakCallback) error {
+func (e *engine) SpeakCB(text string, cb SpeakCallback) error {
 	ctext := C.CString(text)
 	defer C.free(unsafe.Pointer(ctext))
 
-	c := &ctx{e, cb}
-	ptr := c.ptr()
-	defer freectx(ptr)
+	c := newctx(e, cb)
+	defer c.release()
 
-	if !C.TtsEngine_Speak(e.tts, ctext, ptr) {
+	if !C.TtsEngine_Speak(e.tts, ctext, unsafe.Pointer(c.ptr)) {
 		return fmt.Errorf("%s: %w", text, ErrSpeak)
 	}
 	return nil
