@@ -9,41 +9,32 @@ import (
 	"unsafe"
 )
 
-//export picogoCallback
-func picogoCallback(ptr unsafe.Pointer, audio unsafe.Pointer, audioBytes C.int, final bool) bool {
-	return getctx(ptr).callback(C.GoBytes(audio, audioBytes), final)
+//export speak
+func speak(ptr unsafe.Pointer, audio unsafe.Pointer, audioBytes C.int, final bool) bool {
+	cb := userDataGet(uintptr(ptr)).(Callback)
+	return cb(C.GoBytes(audio, audioBytes), final)
 }
 
 var userLock sync.Mutex
-var userData = make(map[uintptr]*ctx)
-var userPtr uintptr // XXX
+var userData = make(map[uintptr]interface{})
+var userPtr uintptr
 
-//SpeakCallback receives PCM audio chunks as they are being produced.
-type SpeakCallback func(pcm []byte, final bool) bool
-
-type ctx struct {
-	e        *engine
-	callback SpeakCallback
-	ptr      uintptr
-}
-
-func (c *ctx) release() {
-	userLock.Lock()
-	defer userLock.Unlock()
-	delete(userData, c.ptr)
-}
-
-func newctx(e *engine, cb SpeakCallback) *ctx {
+func userDataCreate(obj interface{}) uintptr {
 	userLock.Lock()
 	defer userLock.Unlock()
 	userPtr++
-	c := &ctx{e, cb, userPtr}
-	userData[c.ptr] = c
-	return c
+	userData[userPtr] = obj
+	return userPtr
 }
 
-func getctx(ptr unsafe.Pointer) *ctx {
+func userDataDestroy(ptr uintptr) {
 	userLock.Lock()
 	defer userLock.Unlock()
-	return userData[uintptr(ptr)]
+	delete(userData, ptr)
+}
+
+func userDataGet(ptr uintptr) interface{} {
+	userLock.Lock()
+	defer userLock.Unlock()
+	return userData[ptr]
 }

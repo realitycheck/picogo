@@ -9,9 +9,9 @@ package picogo
 #include <tts_engine.c>
 #include <langfiles.c>
 
-bool cgo_wrapper(void *user, uint32_t rate, uint32_t format, int channels, uint8_t *audio, uint32_t audio_bytes, bool final) {
-	bool picogoCallback(void*, uint8_t*, uint32_t, bool);
-	return picogoCallback(user, audio, audio_bytes, final);
+bool cgo_speak(void *user, uint32_t rate, uint32_t format, int channels, uint8_t *audio, uint32_t audio_bytes, bool final) {
+	bool speak(void*, uint8_t*, uint32_t, bool); // callback.go:speak
+	return speak(user, audio, audio_bytes, final);
 }
 */
 import "C"
@@ -28,7 +28,7 @@ const (
 	//LangDefault is default engine's language.
 	LangDefault = "en-GB"
 
-	//LangDirDefault is default directory that contains pico languages.
+	//LangDirDefault is default directory that should contains language files.
 	LangDirDefault = "/usr/share/pico/lang/"
 
 	//RateDefault is default speech rate value.
@@ -61,7 +61,7 @@ const (
 	//AudioRate is audio sample rate constant.
 	AudioRate = 16000
 
-	//AudioDepth is audio sample format depth constant (S16_LE).
+	//AudioDepth is audio sample format depth constant.
 	AudioDepth = 16
 
 	//AudioChannels is audio channels number constant.
@@ -91,38 +91,8 @@ var (
 	}
 )
 
-//Engine interface provides pico's TTS engine bindings.
-type Engine interface {
-	//Rate gets speech rate.
-	Rate() int
-
-	//Volume gets speech volume.
-	Volume() int
-
-	//Pitch gets speech pitch.
-	Pitch() int
-
-	//SetRate sets speech rate.
-	SetRate(int)
-
-	//SetVolume sets speech volume.
-	SetVolume(int)
-
-	//SetPitch sets speech pitch.
-	SetPitch(int)
-
-	//Stop sends an abort signal to the underlying Speak/SpeakCB audio synth routine.
-	Stop()
-
-	//Speak produces PCM audio output of text value.
-	Speak(string) ([]byte, error)
-
-	//SpeakCB produces PCM audio output of text value to specified callback function.
-	SpeakCB(string, SpeakCallback) error
-}
-
-//New returns pico's TTS engine instance.
-func New(lang, dir string) (Engine, error) {
+//New returns PicoTTS engine.
+func New(lang, dir string) (*Engine, error) {
 	if _, ok := supportedLangs[lang]; !ok {
 		return nil, fmt.Errorf("%s: %w", lang, ErrBadLanguage)
 	}
@@ -131,12 +101,12 @@ func New(lang, dir string) (Engine, error) {
 	}
 
 	cdir := C.CString(dir)
-	clang := C.CString(lang)
 	defer C.free(unsafe.Pointer(cdir))
+	clang := C.CString(lang)
 	defer C.free(unsafe.Pointer(clang))
 
-	e := &engine{
-		tts: C.TtsEngine_Create(cdir, clang, C.tts_callback_t(C.cgo_wrapper)),
+	e := &Engine{
+		tts: C.TtsEngine_Create(cdir, clang, C.tts_callback_t(C.cgo_speak)),
 	}
 
 	if e.tts == nil {
@@ -150,11 +120,16 @@ func New(lang, dir string) (Engine, error) {
 	return e, nil
 }
 
-type engine struct {
+//Callback receives PCM audio chunks as they are being produced.
+type Callback func(pcm []byte, final bool) bool
+
+//Engine provides PicoTTS bindings.
+type Engine struct {
 	tts *C.TTS_Engine
 }
 
-func (e *engine) Speak(text string) ([]byte, error) {
+//Speak produces PCM audio output of text value.
+func (e *Engine) Speak(text string) ([]byte, error) {
 	var b bytes.Buffer
 
 	err := e.SpeakCB(text, func(pcm []byte, final bool) bool {
@@ -165,43 +140,51 @@ func (e *engine) Speak(text string) ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func (e *engine) SpeakCB(text string, cb SpeakCallback) error {
+//SpeakCB produces PCM audio output of text value to specified callback function.
+func (e *Engine) SpeakCB(text string, cb Callback) error {
 	ctext := C.CString(text)
 	defer C.free(unsafe.Pointer(ctext))
 
-	c := newctx(e, cb)
-	defer c.release()
+	ptr := userDataCreate(cb)
+	defer userDataDestroy(ptr)
 
-	if !C.TtsEngine_Speak(e.tts, ctext, unsafe.Pointer(c.ptr)) {
+	if !C.TtsEngine_Speak(e.tts, ctext, unsafe.Pointer(ptr)) {
 		return fmt.Errorf("%s: %w", text, ErrSpeak)
 	}
 	return nil
 }
 
-func (e *engine) Stop() {
+//Abort sends an abort signal to the underlying Speak/SpeakCB audio synth routine.
+func (e *Engine) Abort() {
 	C.TtsEngine_Stop(e.tts)
 }
 
-func (e *engine) Rate() int {
+//Rate gets speech rate.
+func (e *Engine) Rate() int {
 	return int(C.TtsEngine_GetRate(e.tts))
 }
 
-func (e *engine) SetRate(rate int) {
+//SetRate sets speech rate.
+func (e *Engine) SetRate(rate int) {
 	C.TtsEngine_SetRate(e.tts, C.int(rate))
 }
 
-func (e *engine) Volume() int {
+//Volume gets speech volume.
+func (e *Engine) Volume() int {
 	return int(C.TtsEngine_GetVolume(e.tts))
 }
 
-func (e *engine) SetVolume(volume int) {
+//SetVolume sets speech volume.
+func (e *Engine) SetVolume(volume int) {
 	C.TtsEngine_SetVolume(e.tts, C.int(volume))
 }
 
-func (e *engine) Pitch() int {
+//Pitch gets speech pitch.
+func (e *Engine) Pitch() int {
 	return int(C.TtsEngine_GetPitch(e.tts))
 }
 
-func (e *engine) SetPitch(pitch int) {
+//SetPitch sets speech pitch.
+func (e *Engine) SetPitch(pitch int) {
 	C.TtsEngine_SetPitch(e.tts, C.int(pitch))
 }

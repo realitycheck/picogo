@@ -12,6 +12,7 @@ Go CGO library and frontend for PicoTTS.
 ### Use `picogo` cmd
 
 ```
+> go get github.com/realitycheck/picogo
 > go install github.com/realitycheck/picogo/cmd/picogo
 > picogo -h
 ```
