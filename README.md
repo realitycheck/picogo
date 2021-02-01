@@ -1,6 +1,6 @@
 # picogo
 
-[![GoDoc](https://pkg.go.dev/github.com/realitycheck/picogo/lib?status.svg)](https://pkg.go.dev/github.com/realitycheck/picogo/lib)
+[![Go Reference](https://pkg.go.dev/badge/github.com/realitycheck/picogo/lib?status.svg.svg)](https://pkg.go.dev/github.com/realitycheck/picogo/lib?status.svg)
 [![Go Report Card](https://goreportcard.com/badge/github.com/realitycheck/picogo/lib)](https://goreportcard.com/report/github.com/realitycheck/picogo/lib)
 
 A Go library(CGO) and frontend app to **pico** text to speech C library.
