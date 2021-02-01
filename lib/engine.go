@@ -1,7 +1,7 @@
 package picogo
 
 /*
-#cgo CFLAGS: -I./picopi/pico/lib -I./picopi/pico/tts
+#cgo CFLAGS: -I../picopi/pico/lib -I../picopi/pico/tts
 #cgo linux LDFLAGS: -lm
 
 #include <stdlib.h>
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"unsafe"
 )
 
@@ -91,8 +92,8 @@ var (
 	}
 )
 
-//New returns PicoTTS engine.
-func New(lang, dir string) (*Engine, error) {
+//NewEngine returns PicoTTS engine.
+func NewEngine(lang, dir string) (*Engine, error) {
 	if _, ok := supportedLangs[lang]; !ok {
 		return nil, fmt.Errorf("%s: %w", lang, ErrBadLanguage)
 	}
@@ -113,8 +114,10 @@ func New(lang, dir string) (*Engine, error) {
 		return nil, ErrCreate
 	}
 
-	runtime.SetFinalizer(&e.tts, func(tts **C.TTS_Engine) {
-		C.TtsEngine_Destroy(*tts)
+	runtime.SetFinalizer(e, func(e *Engine) {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		C.TtsEngine_Destroy(e.tts)
 	})
 
 	return e, nil
@@ -125,6 +128,7 @@ type Callback func(pcm []byte, final bool) bool
 
 //Engine provides PicoTTS bindings.
 type Engine struct {
+	mu  sync.Mutex
 	tts *C.TTS_Engine
 }
 
@@ -148,6 +152,8 @@ func (e *Engine) SpeakCB(text string, cb Callback) error {
 	ptr := userDataCreate(cb)
 	defer userDataDestroy(ptr)
 
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if !C.TtsEngine_Speak(e.tts, ctext, unsafe.Pointer(ptr)) {
 		return fmt.Errorf("%s: %w", text, ErrSpeak)
 	}
@@ -156,35 +162,49 @@ func (e *Engine) SpeakCB(text string, cb Callback) error {
 
 //Abort sends an abort signal to the underlying Speak/SpeakCB audio synth routine.
 func (e *Engine) Abort() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	C.TtsEngine_Stop(e.tts)
 }
 
 //Rate gets speech rate.
 func (e *Engine) Rate() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return int(C.TtsEngine_GetRate(e.tts))
 }
 
 //SetRate sets speech rate.
 func (e *Engine) SetRate(rate int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	C.TtsEngine_SetRate(e.tts, C.int(rate))
 }
 
 //Volume gets speech volume.
 func (e *Engine) Volume() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return int(C.TtsEngine_GetVolume(e.tts))
 }
 
 //SetVolume sets speech volume.
 func (e *Engine) SetVolume(volume int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	C.TtsEngine_SetVolume(e.tts, C.int(volume))
 }
 
 //Pitch gets speech pitch.
 func (e *Engine) Pitch() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return int(C.TtsEngine_GetPitch(e.tts))
 }
 
 //SetPitch sets speech pitch.
 func (e *Engine) SetPitch(pitch int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	C.TtsEngine_SetPitch(e.tts, C.int(pitch))
 }

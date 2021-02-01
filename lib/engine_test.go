@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	langDirInternal = "./picopi/pico/lang/"
+	langDirInternal = "../picopi/pico/lang/"
 )
 
 func Test_New(t *testing.T) {
@@ -70,7 +70,7 @@ func Test_New(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e, err := New(tt.lang, tt.dir)
+			e, err := NewEngine(tt.lang, tt.dir)
 			if err != nil {
 				if tt.wantErr != errors.Unwrap(err) {
 					t.Errorf("want %v error, but got %v", tt.wantErr, err)
@@ -104,6 +104,11 @@ func Test_Speak(t *testing.T) {
 			text: "Hello",
 			want: 19968,
 		},
+		{
+			lang: "en-GB",
+			text: ".............................................................",
+			want: 1085312,
+		},
 	}
 
 	for _, tt := range tests {
@@ -121,7 +126,7 @@ func Test_Speak(t *testing.T) {
 }
 
 func newTestEngine(lang string) *Engine {
-	e, err := New(lang, langDirInternal)
+	e, err := NewEngine(lang, langDirInternal)
 	if err != nil {
 		panic(err)
 	}
