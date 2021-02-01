@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	picogo "github.com/realitycheck/picogo/lib"
+	"github.com/realitycheck/picogo"
 )
 
 func ExampleEngine_Speak() {

@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
-	picogo "github.com/realitycheck/picogo/lib"
+	"github.com/realitycheck/picogo"
 )
 
 var (

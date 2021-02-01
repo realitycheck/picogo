@@ -11,7 +11,7 @@ const (
 	langDirInternal = "../picopi/pico/lang/"
 )
 
-func Test_New(t *testing.T) {
+func Test_NewEngine(t *testing.T) {
 
 	tests := []struct {
 		name      string

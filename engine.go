@@ -1,7 +1,7 @@
 package picogo
 
 /*
-#cgo CFLAGS: -I../picopi/pico/lib -I../picopi/pico/tts
+#cgo CFLAGS: -I./picopi/pico/lib -I./picopi/pico/tts
 #cgo linux LDFLAGS: -lm
 
 #include <stdlib.h>
