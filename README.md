@@ -12,6 +12,7 @@ A Go library(CGO) and frontend app to **pico** text to speech C library.
 ```bash
 # picogo installation
 > git clone github.com/realitycheck/picogo
+> git submodule update --init
 > cd picogo
 > make
 > sudo make install
